@@ -9,7 +9,9 @@ def make_lm_adaptor_model(config: "DictConfig") -> LMAdaptorModel:
                           config.fluent,
                           config.fluent_top_k,
                           config.max_decoding_length,
-                          config.eos_token_id)
+                          config.eos_token_id, 
+                          config.training_device,
+                          )
 
 
 def make_single_prompt_model(model: BaseModel,

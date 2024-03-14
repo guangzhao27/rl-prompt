@@ -6,7 +6,7 @@ defaults:
 num_shots: 16
 base_path: "./data"
 dataset: "???"
-dataset_seed: 0
+dataset_seed: 5
 # Reward
 task_lm: "roberta-large"
 # Single Prompt Model
@@ -20,9 +20,20 @@ reward_shaping_new_min: 0
 reward_shaping_new_max: 5
 top_k: 256
 # Trainer
-max_train_steps: 12000
+max_train_steps: 15
 train_shuffle: false
 eval_steps: 10
 save_steps: 100
 learning_rate: 5e-5
 random_seed: null
+# new settings
+report_to_wandb: false
+training_device: "cpu"
+dpo_training: false
+run_name: null 
+dpo_loss_config: 
+  name: "dpo"
+  beta: 0.5
+  reference_free: false
+  label_smoothing: 0.0
+  reference_learning_rate: 0.001

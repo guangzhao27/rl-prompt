@@ -1,15 +1,26 @@
 from dataclasses import dataclass
 from torch.utils.data import Dataset
-from typing import Optional
+from typing import Optional, Any, Dict
 
 from rlprompt.modules import BaseModule
-from rlprompt.trainers import Trainer
+from rlprompt.trainers import Trainer, DPO_Trainer
 
 
 def make_trainer(module: BaseModule,
                  train_dataset: Optional[Dataset],
                  eval_dataset: Optional[Dataset],
                  config: "DictConfig") -> Trainer:
+    if config.dpo_training:
+        return DPO_Trainer(module, train_dataset, config.train_batch_size,
+                        config.train_shuffle, config.train_drop_last, 
+                        config.num_train_epochs, config.max_train_steps, 
+                        config.do_eval, eval_dataset, config.eval_batch_size, 
+                        config.eval_steps, config.do_save, config.save_dir, 
+                        config.save_steps, config.learning_rate, 
+                        config.gradient_clip, config.gradient_clip_norm, 
+                        config.checkpoint_path, config.random_seed,
+                        config.report_to_wandb, config.project_name, 
+                        config.run_name, config.dpo_loss_config)
     return Trainer(module, train_dataset, config.train_batch_size,
                    config.train_shuffle, config.train_drop_last, 
                    config.num_train_epochs, config.max_train_steps, 
@@ -30,6 +41,8 @@ class TrainerConfig:
     train_drop_last: bool = True
     num_train_epochs: int = 1
     max_train_steps: int = -1
+    training_device: str = "cpu"
+    dpo_training: bool = False
     # Eval params
     do_eval: bool = True
     eval_batch_size: int = 16
@@ -50,3 +63,4 @@ class TrainerConfig:
     report_to_wandb: bool = True
     project_name: Optional[str] = 'rl-prompt'
     run_name: Optional[str] = None
+    dpo_loss_config: Optional[Dict[str, Any]] = None

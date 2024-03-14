@@ -127,13 +127,15 @@ def make_prompted_classification_reward(
                                         config.compute_zscore, 
                                         config.incorrect_coeff, 
                                         config.correct_coeff,
-                                        num_classes, verbalizers, template)
+                                        num_classes, verbalizers, template, report_to_wandb=config.report_to_wandb)
 
 
 @dataclass
 class PromptedClassificationRewardConfig:
+    fruit: List[str]
     task_lm: str = 'distilroberta-base'
     is_mask_lm: Optional[bool] = None
     compute_zscore: bool = True
     incorrect_coeff: float = 180.0
     correct_coeff: float = 200.0
+    

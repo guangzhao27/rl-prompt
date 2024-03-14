@@ -20,7 +20,9 @@ class PromptedClassificationReward(BaseReward):
         correct_coeff: float, # lambda_2 in paper
         num_classes: int,
         verbalizers: List[str],
-        template: Optional[str]
+        template: Optional[str],
+        training_type: str = 'rl_training',
+        report_to_wandb: bool = False, 
     ):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available()
@@ -53,6 +55,8 @@ class PromptedClassificationReward(BaseReward):
         self.correct_coeff = correct_coeff
         self.num_classes = num_classes
         self.verbalizers = verbalizers
+        self.training_type = training_type
+        self.print = not report_to_wandb
         print('Verbalizers:', self.verbalizers)
         self.verbalizer_ids = [self._tokenizer.convert_tokens_to_ids(v)
                                for v in self.verbalizers]
@@ -116,12 +120,12 @@ class PromptedClassificationReward(BaseReward):
             gap = (label_probs - max_not_label_probs)
             correct = (gap > 0).long()
             gap_rewards = gap * (self.correct_coeff * correct \
-                                 + self.incorrect_coeff * (1 - correct))
+                                 + self.incorrect_coeff * (1 - correct))  ## reward define here
             reward = gap_rewards.mean().detach()
 
             # Log quantities such as accuracy and class-wise reward
             acc = correct.float().mean()
-            quantities_to_log['acc'] = acc
+            quantities_to_log['acc'].append(acc.item())
             for c in range(self.num_classes):
                 class_idx = np.array(class_labels) == c
                 class_rewards = gap_rewards[class_idx]
@@ -134,19 +138,20 @@ class PromptedClassificationReward(BaseReward):
             input_rewards['z'] += [reward.item()]
 
             # Print examples
-            print_strs = [self._counter, '|', prompt, '\n']
-            for c in range(self.num_classes):
-                class_example_idx = np.where(np.array(class_labels) == c)[0][0]
-                class_example = formatted_templates[class_example_idx]
-                class_example_probs = class_probs[class_example_idx, :].tolist()
-                class_example_probs = [round(prob, 2) \
-                                       for prob in class_example_probs]
-                print_strs += ['Class', c, 'Example:', 
-                               class_example, '|',
-                               'Probs:', class_example_probs, '\n']
-            print_strs += ['Accuracy:', acc.item(), '|',
-                           'Reward:', round(reward.item(), 2)]
-            print(*print_strs)
+            if  self.print:
+                print_strs = [self._counter, '|', prompt, '\n']  #count of the rounds
+                for c in range(self.num_classes):
+                    class_example_idx = np.where(np.array(class_labels) == c)[0][0]
+                    class_example = formatted_templates[class_example_idx]
+                    class_example_probs = class_probs[class_example_idx, :].tolist()
+                    class_example_probs = [round(prob, 2) \
+                                        for prob in class_example_probs]
+                    print_strs += ['Class', c, 'Example:', 
+                                class_example, '|',
+                                'Probs:', class_example_probs, '\n']
+                print_strs += ['Accuracy:', acc.item(), '|',
+                            'Reward:', round(reward.item(), 2)]
+                print(*print_strs)
         rewards_tensor = torch.stack(rewards)
 
         # z-score normalization (2nd stage)
@@ -169,8 +174,9 @@ class PromptedClassificationReward(BaseReward):
 
         rewards_log = dict(
             (reward_key, torch.mean(torch.tensor(reward_vals)))
-            for reward_key, reward_vals in quantities_to_log.items())
-
+            for reward_key, reward_vals in quantities_to_log.items())  ## reward log is defined here
+        print(self._counter)
+        print(rewards_log)
         if to_tensor is True:
             return rewards_tensor, rewards_log
         else:

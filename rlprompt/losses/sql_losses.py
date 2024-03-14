@@ -159,7 +159,7 @@ def soft_q_loss_with_sparse_rewards_2(
     A = Q - V
     # print(logits.shape)
     # print(V)
-    print(Q)
+    # what is Q?  they use  soft Q-learning
 
     # Target outputs
     Q_ = torch.zeros_like(Q)

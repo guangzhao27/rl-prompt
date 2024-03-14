@@ -32,6 +32,7 @@ class SQLModule(BaseModule):
         top_k: Optional[int],
         top_p: float,
         num_beams: int,
+        training_type: str = 'rl_training', 
     ):
         super().__init__()
         # Initialize self._model and self._reward
@@ -43,7 +44,7 @@ class SQLModule(BaseModule):
         if target_model is None:
             self._target_model = copy.deepcopy(self._model)
         else:
-            self._target_model = target_model
+            self._target_model = target_model #target model is the policy model
         # for p1, p2 in zip(self._model.parameters(), self._target_model.parameters()):
         #     if p1.data.ne(p2.data).sum() > 0:
         #         print(False)
@@ -60,6 +61,7 @@ class SQLModule(BaseModule):
         self._top_k = top_k
         self._top_p = top_p
         self._num_beams = num_beams
+        self._training_type = training_type
 
         if reward_shaping is True:
             self._reward_shaping_func = get_reward_shaping_func(
@@ -116,40 +118,59 @@ class SQLModule(BaseModule):
             # TODO: Enable training modes other than on-policy
             raise NotImplementedError('Only on-policy sampling and greedy '
                                       'inference is supported now')
-
+        
         if mode == ForwardMode.SQL_ON:
             (logits, logits_, output_tokens, output_ids, sequence_lengths) = \
                 self._decode_sampling(batch=batch)
 
         raw_rewards, rewards_log = \
             self.compute_rewards(batch=batch, 
-                                  output_tokens=output_tokens,
-                                  mode="train")
+                                output_tokens=output_tokens,
+                                mode="train")
         shaped_rewards = self._reward_shaping_func(raw_rewards)
 
-        sql_loss, sql_loss_log = sql_loss_with_sparse_rewards(
-            implementation=self._sql_loss_impl,
-            logits=logits,
-            logits_=logits_,
-            actions=output_ids,
-            sampled_actions=None,
-            rewards=shaped_rewards,
-            sequence_length=sequence_lengths)
+        if self._training_type == 'rl_training':
+            sql_loss, sql_loss_log = sql_loss_with_sparse_rewards(
+                implementation=self._sql_loss_impl,
+                logits=logits,
+                logits_=logits_,
+                actions=output_ids,
+                sampled_actions=None,
+                rewards=shaped_rewards,
+                sequence_length=sequence_lengths)
 
-        utils.add_prefix_to_dict_keys_inplace(
-            rewards_log, prefix=f"{mode.value}/rewards/")
-        utils.add_prefix_to_dict_keys_inplace(
-            sql_loss_log, prefix=f"{mode.value}/")
-        sql_loss_log = utils.unionize_dicts([
-            rewards_log,
-            sql_loss_log,
-            {
-                f"{mode.value}/rewards/raw": raw_rewards.mean(),
-                f"{mode.value}/rewards/shaped": shaped_rewards.mean(),
-            },
-        ])
+            utils.add_prefix_to_dict_keys_inplace(
+                rewards_log, prefix=f"{mode.value}/rewards/")
+            utils.add_prefix_to_dict_keys_inplace(
+                sql_loss_log, prefix=f"{mode.value}/")
+            sql_loss_log = utils.unionize_dicts([
+                rewards_log,
+                sql_loss_log,
+                {
+                    f"{mode.value}/rewards/raw": raw_rewards.mean(),
+                    f"{mode.value}/rewards/shaped": shaped_rewards.mean(),
+                },
+            ])
+        else:
+            NotImplementedError("This functionality is not implemented yet.")
 
         return sql_loss, sql_loss_log
+
+    def compute_reward_matrix(
+        self,
+        batch: Dict[str, Any]
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+
+        (logits, logits_, output_tokens, output_ids, sequence_lengths) = \
+            self._decode_sampling(batch=batch)
+        
+        raw_rewards, rewards_log = \
+            self.compute_rewards(batch=batch, 
+                                output_tokens=output_tokens,
+                                mode="train")
+        shaped_rewards = self._reward_shaping_func(raw_rewards)
+        return shaped_rewards, rewards_log, logits, logits_, 
+        
 
     def compute_rewards(
         self,
@@ -192,7 +213,7 @@ class SQLModule(BaseModule):
         batch_ = {k: v for k, v in batch.items()}
         batch_.update(outputs)
 
-        outputs_ = self._target_model.teacher_forcing(**batch_)
+        outputs_ = self._target_model.teacher_forcing(**batch_)  ## the logit outputs is already autoregressively based on previous inputs
 
         return (outputs['sample_logits'].contiguous(),
                 outputs_['sample_logits'].contiguous(),

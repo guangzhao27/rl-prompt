@@ -37,13 +37,14 @@ class LMAdaptorModel(BaseModel):
         fluent_top_k: Optional[int],
         # Generation parameters
         max_decoding_length: int,
-        eos_token_id: Optional[int]
+        eos_token_id: Optional[int],
+        training_device: str,
     ):
         super().__init__()
 
         assert policy_lm in SUPPORTED_LMS  # TODO: Support more LMs
         model = policy_lm
-        self.device = 0  # TODO
+        self.device = training_device  # TODO
         self.tokenizer = AutoTokenizer.from_pretrained(
             model,
             pad_token='<|endoftext|>')
@@ -90,7 +91,7 @@ class LMAdaptorModel(BaseModel):
         source_texts: List[str],
         sample_ids: torch.Tensor,
         **kwargs
-    ) -> Dict[str, torch.Tensor]:
+    ) -> Dict[str, torch.Tensor]: #this function return the logit of given prompts
         state, past_key_values = self._get_generation_cache(source_texts)
 
         sample_logits = []
