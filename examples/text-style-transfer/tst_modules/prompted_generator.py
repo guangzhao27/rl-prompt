@@ -17,12 +17,11 @@ class PromptedGenerator:
         control_output_length: bool
     ):
         self.tokenizer = AutoTokenizer.from_pretrained(model,
-                                                       pad_token=pad_token)
+                                                       pad_token=pad_token, save_directory="../llm_cache_dir")
         self.generator = pipeline("text-generation",
                                   model=model,
                                   tokenizer=self.tokenizer,
                                   device=device_id)
-
         self.template = template
         self.end_punct = end_punct
         self.lower_outputs = lower_outputs

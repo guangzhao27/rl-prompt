@@ -2,7 +2,7 @@ import os
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import sys
-sys.path.append('/hpcgpfs01/scratch/gzhao/rl-prompt')
+sys.path.append('../../')
 from rlprompt.models import (LMAdaptorModelConfig, SinglePromptModelConfig,
                              make_lm_adaptor_model, make_single_prompt_model)
 from rlprompt.modules import SQLModuleConfig, make_sql_module
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
 
 """
-/hpcgpfs01/scratch/gzhao/rl-prompt/examples/few-shot-classification/fsc_reward.py 
+/scratch/gzhao/rl-prompt/examples/few-shot-classification/fsc_reward.py 
 calcualte the reward and print the results:
 2 | BrowserStats 
  Class 0 Example: Horrible management. Doors were supposed to open at 12:30 - didn't open until 12:50. Snack bar not ready. Manager wasn't smart enough to apologize. Only open seating - seats very uncomfortable. BrowserStats <mask> . | Probs: [0.41, 0.46, 0.01, 0.06, 0.05] 

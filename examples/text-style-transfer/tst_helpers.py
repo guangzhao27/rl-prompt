@@ -9,7 +9,22 @@ from tst_reward import PromptedTextStyleTransferReward
 from tst_data_utils import (TextStyleTransferDataset, 
                             load_text_style_transfer_dataset)
 
+algorithm_dict = {
+    "RlPrompt": {"dpo_training":False, "name":"dpo", "multi_optimize":False, "nondominate_punishment":None}, 
+    "Reward-Guided DPO": {"dpo_training":True, "name":"dpo", "multi_optimize":False, "nondominate_punishment":None}, 
+    "Reward-Guided IPO": {"dpo_training":True, "name":"ipo", "multi_optimize":False, "nondominate_punishment":None}, 
+    "Dominance-Only DPO": {"dpo_training":True, "name":"dpo", "multi_optimize":True, "nondominate_punishment":None}, 
+    "Dominance-Only IPO": {"dpo_training":True, "name":"ipo", "multi_optimize":True, "nondominate_punishment":None}, 
+    "ParetoPrompt DPO": {"dpo_training":True, "name":"dpo", "multi_optimize":True, "nondominate_punishment":"prob_diff"}, 
+    "ParetoPrompt IPO": {"dpo_training":True, "name":"ipo", "multi_optimize":True, "nondominate_punishment":"prob_diff"}, 
+}
 
+
+
+def algorithm_set_config(config: "DictConfig"):
+    for key, value in algorithm_dict[config.algorithm_name].items():
+        setattr(config.dpo_loss_config, key, value)
+    return
 
 def make_text_style_transfer_datasets(
         config: "DictConfig") -> Tuple[TextStyleTransferDataset]: 
@@ -18,7 +33,7 @@ def make_text_style_transfer_datasets(
     data_dict = {}
     for split in ['train', 'dev', 'test']: 
         # Hack - Only use 16 examples for Yelp validation to save time
-        if config.dataset == "yelp" and split == 'dev': 
+        if split == 'dev': 
             max_size = 16
         else: 
             max_size = config.max_size
@@ -78,8 +93,9 @@ def make_prompted_text_style_transfer_reward(
         config.style_batch_size, config.pad_token, config.num_repeats, 
         config.num_samples, config.num_bootstraps, config.compute_zscore, 
         config.lower_outputs, config.control_output_length,
-        config.template, config.end_punct)
-
+        config.template, config.end_punct, config.training_device, config.dpo_loss_config.multi_optimize)
+    # cnofig.num_repeats repeating the number of input texts it should equal to num of prompts
+    # 
 
 @dataclass
 class TextStyleTransferDatasetConfig:

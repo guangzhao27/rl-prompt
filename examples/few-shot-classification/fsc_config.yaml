@@ -29,9 +29,10 @@ random_seed: null
 # new settings
 report_to_wandb: false
 training_device: "cpu"
-dpo_training: false
+
 run_name: null 
 dpo_loss_config: 
+  dpo_training: false
   name: "dpo"
   beta: 0.5
   reference_free: false

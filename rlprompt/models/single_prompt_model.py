@@ -31,12 +31,14 @@ class SinglePromptModel(BaseModel):
         num_beams: Optional[int],
         max_new_tokens: Optional[int] = None,
         infer: bool = False,
+        batch_size: Optional[int] = None,
         **kwargs
     ) -> Dict[str, Any]:
-        if infer: 
-            batch_size = min(self.prompt_infer_batch_size, len(source_texts))
-        else: 
-            batch_size = self.prompt_train_batch_size
+        if batch_size is None:
+            if infer: 
+                batch_size = min(self.prompt_infer_batch_size, len(source_texts))
+            else: 
+                batch_size = self.prompt_train_batch_size
         prompt_source = self._get_prompt_source(batch_size=batch_size)
 
         if max_new_tokens is None: 

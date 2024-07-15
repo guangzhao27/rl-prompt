@@ -6,3 +6,6 @@
 *ppl
 *.egg-info
 slurm*
+*cache*
+*.tsv
+*16-shot*

@@ -32,14 +32,16 @@ class PromptedTextStyleTransferReward(BaseReward):
         control_output_length: bool,  # Control output length for speedup
         template: str,  # Template for prompt generation
         end_punct: str,  # End punctuation to cut off after generation
+        device: str,
+        multi_optimize: bool = False
     ):
-        generator_device = 0  # TODO
-        reward_device = 0  # TODO
+        generator_device = device  # TODO
+        reward_device = device  # TODO
 
         # Loading generator model
         assert task_lm in SUPPORTED_LMS
         print('Task LM:', task_lm)
-        self.tokenizer = AutoTokenizer.from_pretrained(task_lm)
+        self.tokenizer = AutoTokenizer.from_pretrained(task_lm, cache_dir="./llm_cache_dir")
         self.generator = PromptedGenerator(task_lm, template, end_punct,
                                            pad_token, generator_device,
                                            lower_outputs, control_output_length)
@@ -61,6 +63,7 @@ class PromptedTextStyleTransferReward(BaseReward):
         self.compute_zscore = compute_zscore
         self._counter = 0
         self.tokens_explored = set()
+        self.multi_optimize = multi_optimize
 
     def forward(
         self,
@@ -68,7 +71,8 @@ class PromptedTextStyleTransferReward(BaseReward):
         target_labels: List[str],
         output_tokens: List[List[str]],
         to_tensor: bool,
-        mode: str
+        mode: str, 
+        multi_optimize: bool= False
     ) -> Tuple[Union[List[float], torch.Tensor], Dict[str, Any]]:
         if mode == 'train':
             self._counter += 1
@@ -85,9 +89,11 @@ class PromptedTextStyleTransferReward(BaseReward):
 
         n_reward = self.num_samples
         k_reward = self.num_bootstraps
-        N = n_reward * k_reward
+        N = n_reward * k_reward # number of generated text for each input and prompt pair 
 
-        rewards: List[torch.Tensor] = []
+        rewards: List[torch.Tensor] = [] 
+        probs: List[torch.Tensor] = []
+        contents: List[torch.Tensor] = []
         input_rewards: Dict[str, List[float]] = defaultdict(list)
         quantities_to_log: Dict[str, List[torch.Tensor]] = defaultdict(list)
         for i, (prompt, src, label) in enumerate(zip(prompt_strs,
@@ -102,7 +108,11 @@ class PromptedTextStyleTransferReward(BaseReward):
             bootstrap_max_rewards: List[float] = \
                 self._boostrap_max_rewards_k_times(sum_rewards, k_reward)
             # Average boostrap max rewards as the final reward
-            reward = torch.Tensor(bootstrap_max_rewards).float().mean()
+            if multi_optimize:
+            # reward = torch.Tensor(bootstrap_max_rewards).float().mean()
+                reward = torch.Tensor(sum_rewards).float().mean()
+            else:
+                reward = torch.Tensor(bootstrap_max_rewards).float().mean()
 
             # Keep track of each input's max rewards to compute z-score
             input_rewards[src] += bootstrap_max_rewards
@@ -131,6 +141,8 @@ class PromptedTextStyleTransferReward(BaseReward):
                   'Top Reward:', round(max_reward, 2), '|',
                   'Reward:', round(reward.item(), 2))
             rewards.append(reward)
+            probs.append(prob)
+            contents.append(content)
 
         rewards_tensor = torch.stack(rewards)
         if mode == "train" and self.compute_zscore:
@@ -146,7 +158,13 @@ class PromptedTextStyleTransferReward(BaseReward):
         rewards_log = dict(
             (reward_key, torch.stack(reward_vals, dim=0).mean())
             for reward_key, reward_vals in quantities_to_log.items())
-
+        
+        
+        if multi_optimize is True:
+                mean_style = torch.stack(probs)
+                mean_content = torch.stack(contents)
+                return rewards_tensor, mean_style, mean_content, rewards_log
+        
         if to_tensor is True:
             return rewards_tensor, rewards_log
         else:
