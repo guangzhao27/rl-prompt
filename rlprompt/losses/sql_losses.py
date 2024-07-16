@@ -354,7 +354,7 @@ def soft_q_loss_with_sparse_rewards_3_3_reversed(
     return raw_losses, quantities_to_log
 
 
-def soft_q_loss_with_sparse_rewards_2_2_reversed_3_3_reversed(
+def soft_q_loss_with_sparse_rewards_2_2_reversed_3_3_reversed( ##
         logits: torch.Tensor,
         logits_: torch.Tensor,
         actions: torch.LongTensor,

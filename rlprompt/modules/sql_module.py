@@ -177,16 +177,29 @@ class SQLModule(BaseModule):
         batch: Dict[str, Any],
         output_tokens: List[List[str]],
         to_tensor: bool = True,
-        mode: str = "infer"
+        mode: str = "infer",
+        multi_optimize: bool = False, 
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
-        rewards_tensor, rewards_log = self._reward(
+        if multi_optimize:
+            sum_reward, content_reward, style_reward, rewards_log = self._reward(
             **batch,
             output_tokens=output_tokens,
             to_tensor=to_tensor,
-            mode=mode)
+            mode=mode, multi_optimize=multi_optimize)
+            sum_reward = sum_reward.to(device)
+            content_reward = content_reward.to(device)
+            style_reward = style_reward.to(device)
+                        
+            return sum_reward, content_reward, style_reward, rewards_log
+        else:
+            rewards_tensor, rewards_log = self._reward(
+                **batch,
+                output_tokens=output_tokens,
+                to_tensor=to_tensor,
+                mode=mode)
 
-        rewards_tensor = rewards_tensor.to(device)            
-        return rewards_tensor, rewards_log
+            rewards_tensor = rewards_tensor.to(device)            
+            return rewards_tensor, rewards_log
 
     def infer(
         self,
@@ -202,24 +215,32 @@ class SQLModule(BaseModule):
     def _decode_sampling(
         self,
         batch: Dict[str, Any],
+        batch_size: Optional[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, List[List[str]],
                torch.LongTensor, torch.LongTensor]:
         outputs = self._model.generate(**batch,
                                        do_sample=True,
                                        top_k=self._top_k,
                                        top_p=self._top_p,
-                                       num_beams=self._num_beams)
+                                       num_beams=self._num_beams, 
+                                       batch_size=batch_size)
 
         batch_ = {k: v for k, v in batch.items()}
         batch_.update(outputs)
-
-        outputs_ = self._target_model.teacher_forcing(**batch_)  ## the logit outputs is already autoregressively based on previous inputs
-
-        return (outputs['sample_logits'].contiguous(),
-                outputs_['sample_logits'].contiguous(),
-                outputs['sample_tokens'],
-                outputs['sample_ids'].contiguous(),
-                outputs['sample_lengths'].contiguous())
+        if batch_size is None:
+            outputs_ = self._target_model.teacher_forcing(**batch_)  ## the logit outputs is already autoregressively based on previous inputs
+            return (outputs['sample_logits'].contiguous(),
+                    outputs_['sample_logits'].contiguous(),
+                    outputs['sample_tokens'],
+                    outputs['sample_ids'].contiguous(),
+                    outputs['sample_lengths'].contiguous())
+        else: 
+            return (outputs['sample_logits'].contiguous(),
+                    None,
+                    outputs['sample_tokens'],
+                    outputs['sample_ids'].contiguous(),
+                    outputs['sample_lengths'].contiguous())
+            
 
 
 def _get_forward_modes(

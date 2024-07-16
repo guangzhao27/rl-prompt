@@ -3,15 +3,16 @@ from torch.utils.data import Dataset
 from typing import Optional, Any, Dict
 
 from rlprompt.modules import BaseModule
-from rlprompt.trainers import Trainer, DPO_Trainer
+from rlprompt.trainers import Trainer, DPO_Trainer, DPO_O2_Trainer
 
 
 def make_trainer(module: BaseModule,
                  train_dataset: Optional[Dataset],
                  eval_dataset: Optional[Dataset],
                  config: "DictConfig") -> Trainer:
-    if config.dpo_training:
-        return DPO_Trainer(module, train_dataset, config.train_batch_size,
+    if config.dpo_loss_config.dpo_training:
+        if config.dpo_loss_config.multi_optimize:
+            return DPO_O2_Trainer(module, train_dataset, config.train_batch_size,
                         config.train_shuffle, config.train_drop_last, 
                         config.num_train_epochs, config.max_train_steps, 
                         config.do_eval, eval_dataset, config.eval_batch_size, 
@@ -21,6 +22,17 @@ def make_trainer(module: BaseModule,
                         config.checkpoint_path, config.random_seed,
                         config.report_to_wandb, config.project_name, 
                         config.run_name, config.dpo_loss_config)
+        else:
+            return DPO_Trainer(module, train_dataset, config.train_batch_size,
+                            config.train_shuffle, config.train_drop_last, 
+                            config.num_train_epochs, config.max_train_steps, 
+                            config.do_eval, eval_dataset, config.eval_batch_size, 
+                            config.eval_steps, config.do_save, config.save_dir, 
+                            config.save_steps, config.learning_rate, 
+                            config.gradient_clip, config.gradient_clip_norm, 
+                            config.checkpoint_path, config.random_seed,
+                            config.report_to_wandb, config.project_name, 
+                            config.run_name, config.dpo_loss_config)
     return Trainer(module, train_dataset, config.train_batch_size,
                    config.train_shuffle, config.train_drop_last, 
                    config.num_train_epochs, config.max_train_steps, 

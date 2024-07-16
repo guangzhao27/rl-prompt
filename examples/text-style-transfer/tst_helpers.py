@@ -78,7 +78,7 @@ def make_prompted_text_style_transfer_reward(
         config.style_batch_size, config.pad_token, config.num_repeats, 
         config.num_samples, config.num_bootstraps, config.compute_zscore, 
         config.lower_outputs, config.control_output_length,
-        config.template, config.end_punct)
+        config.template, config.end_punct, config.training_device, config.reward_type)
 
 
 @dataclass

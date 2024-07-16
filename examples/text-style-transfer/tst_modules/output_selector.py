@@ -50,7 +50,7 @@ class TextStyleTransferOutputSelector:
         sum_rewards = [(c + s) / 2 \
                        for c, s in zip(content_rewards, style_rewards)]
 
-        return sum_rewards, content_rewards, style_rewards
+        return sum_rewards, content_rewards, style_rewards 
         
     def select_outputs_batch(
         self, 

@@ -1,0 +1,62 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "run_tst",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/hpcgpfs01/scratch/gzhao/rl-prompt/examples/text-style-transfer/run_tst.py",
+            "console": "integratedTerminal", 
+            "args": [
+                "dataset=yelp",
+                //  "dataset_seed=0",
+                "direction=0_to_1",
+                "prompt_length=2",
+                "task_lm=distilgpt2",
+                "report_to_wandb=false",
+                "dpo_training=true",
+                "eval_steps=5",
+                "dpo_loss_config.dpo_training=true",
+                "dpo_loss_config.multi_optimize=true",
+                "dpo_loss_config.name=reinforce", 
+                "dpo_loss_config.nondominate_punishment=prob_diff",
+                "train_batch_size=2",
+                "run_name=newrun", 
+                "model_path=null", 
+                "load_step=7000",
+                "random_seed=42", 
+                "reward_type=rlprompt",
+            ],
+            "cwd": "/hpcgpfs01/scratch/gzhao/rl-prompt/examples/text-style-transfer"
+        },
+        {
+            "name": "load model",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/hpcgpfs01/scratch/gzhao/rl-prompt/examples/text-style-transfer/load_model/run_tst_load_model.py",
+            "console": "integratedTerminal",
+            "args": [
+                "dataset=yelp",
+                "prompt_length=2",
+                "task_lm=gpt2-xl",
+                "direction=0_to_1",
+                "dpo_loss_config.name=ipo",
+                "dpo_loss_config.reference_learning_rate=0.001",
+                "report_to_wandb=false",
+                "dpo_loss_config.dpo_training=true",
+                "dpo_loss_config.multi_optimize=true",
+                "training_device='cpu'",
+                "max_train_steps=12000",
+                "project_name=tst-task",
+                "model_path=outputs/2024-03-27/15-29-39",
+                "run_name=outputs/2024-03-27/15-29-39tst-rl-gpt2-xllalal",
+                "prompt_train_batch_size=5",
+                "epoch_list=[2000, 4000]",
+            ],
+            "cwd": "/hpcgpfs01/scratch/gzhao/rl-prompt/examples/text-style-transfer/load_model"
+        }
+    ]
+}
