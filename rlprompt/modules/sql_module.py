@@ -223,7 +223,8 @@ class SQLModule(BaseModule):
                                        top_k=self._top_k,
                                        top_p=self._top_p,
                                        num_beams=self._num_beams, 
-                                       batch_size=batch_size)
+                                       batch_size=batch_size, 
+                                       temperature = 0.3)
 
         batch_ = {k: v for k, v in batch.items()}
         batch_.update(outputs)

@@ -5,7 +5,6 @@ from typing import Optional, Any, Dict
 from rlprompt.modules import BaseModule
 from rlprompt.trainers import Trainer, DPO_Trainer, DPO_O2_Trainer
 
-
 def make_trainer(module: BaseModule,
                  train_dataset: Optional[Dataset],
                  eval_dataset: Optional[Dataset],

@@ -25,6 +25,9 @@ import random
 import numpy as np
 import torch
 
+# import os
+# os.environ['HF_HOME'] = './llm_cache_dir'
+
 
 @dataclass
 class LoadConfig:
