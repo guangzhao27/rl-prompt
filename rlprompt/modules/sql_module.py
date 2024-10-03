@@ -8,8 +8,9 @@ from rlprompt.rewards import BaseReward
 from rlprompt.modules.module_utils import ForwardMode, get_reward_shaping_func
 from rlprompt.losses import sql_loss_with_sparse_rewards
 from rlprompt.utils import utils
+from rlprompt.trainers.trainer_utils import find_pareto_front, calculate_dominating_volume
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class SQLModule(BaseModule):
@@ -33,6 +34,8 @@ class SQLModule(BaseModule):
         top_p: float,
         num_beams: int,
         training_type: str = 'rl_training', 
+        algorithm_name: str = 'RlPrompt', 
+        device: str = 'cpu'
     ):
         super().__init__()
         # Initialize self._model and self._reward
@@ -62,6 +65,10 @@ class SQLModule(BaseModule):
         self._top_p = top_p
         self._num_beams = num_beams
         self._training_type = training_type
+        self.algorithm_name = algorithm_name
+        self.device = torch.device(device)
+        self.hvi_pareto = None
+        self.hvi_volume = 0
 
         if reward_shaping is True:
             self._reward_shaping_func = get_reward_shaping_func(
@@ -180,26 +187,55 @@ class SQLModule(BaseModule):
         mode: str = "infer",
         multi_optimize: bool = False, 
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
-        if multi_optimize:
-            sum_reward, content_reward, style_reward, rewards_log = self._reward(
+        sum_reward, multi_rewards_dict, tokens_list, rewards_log = self._reward(
             **batch,
             output_tokens=output_tokens,
             to_tensor=to_tensor,
-            mode=mode, multi_optimize=multi_optimize)
-            sum_reward = sum_reward.to(device)
-            content_reward = content_reward.to(device)
-            style_reward = style_reward.to(device)
-                        
-            return sum_reward, content_reward, style_reward, rewards_log
-        else:
-            rewards_tensor, rewards_log = self._reward(
-                **batch,
-                output_tokens=output_tokens,
-                to_tensor=to_tensor,
-                mode=mode)
-
-            rewards_tensor = rewards_tensor.to(device)            
+            mode=mode, multi_optimize=True)
+        
+        if multi_optimize: 
+            return sum_reward, multi_rewards_dict, tokens_list, rewards_log
+        # if self.algorithm_name in ['RlPrompt', ]:
+        #     # rewards_tensor, rewards_log = self._reward(
+        #     #     **batch,
+        #     #     output_tokens=output_tokens,
+        #     #     to_tensor=to_tensor,
+        #     #     mode=mode)
+        if self.algorithm_name == 'Product':
+            tensors = list(multi_rewards_dict.values())
+            product = tensors[0]
+            for tensor in tensors[1:]:
+                product *= tensor
+            
+            rewards_tensor = product.to(self.device)
             return rewards_tensor, rewards_log
+        if self.algorithm_name == 'HVI':
+            rewards_tensor = torch.zeros_like(sum_reward)
+            if self.hvi_pareto is None:
+                self.hvi_pareto = torch.tensor([0]*len(multi_rewards_dict)).reshape(1, -1)
+            reference_point = torch.tensor([0.]*len(multi_rewards_dict))
+            
+            merge_tensor = torch.stack(list(multi_rewards_dict.values()), dim=1)
+            
+            for i, tensor in enumerate(merge_tensor):
+                tensor = tensor.reshape(1, -1)
+                samples = torch.cat((tensor, self.hvi_pareto), axis=0)
+            
+                pareto_front_tensor = find_pareto_front(samples)
+                try:
+                    dominating_volume = calculate_dominating_volume(pareto_front_tensor, reference_point)
+                except:
+                    dominating_volume = 0.0
+                rewards_tensor[i] = dominating_volume
+            
+            self.hvi_pareto = find_pareto_front(torch.cat((merge_tensor, self.hvi_pareto)))
+            print('max volume:', rewards_tensor.max())
+            rewards_tensor = rewards_tensor.to(self.device)
+            
+            return rewards_tensor, rewards_log
+                
+        rewards_tensor = sum_reward.to(self.device)            
+        return rewards_tensor, rewards_log
 
     def infer(
         self,
@@ -223,8 +259,7 @@ class SQLModule(BaseModule):
                                        top_k=self._top_k,
                                        top_p=self._top_p,
                                        num_beams=self._num_beams, 
-                                       batch_size=batch_size, 
-                                       temperature = 0.3)
+                                       batch_size=batch_size, )# edit temperature for sampling
 
         batch_ = {k: v for k, v in batch.items()}
         batch_.update(outputs)

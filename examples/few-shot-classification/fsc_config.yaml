@@ -34,7 +34,10 @@ run_name: null
 dpo_loss_config: 
   dpo_training: false
   name: "dpo"
-  beta: 0.5
+  beta: 1.0
   reference_free: false
   label_smoothing: 0.0
   reference_learning_rate: 0.001
+  multi_optimize: false
+  nondominate_punishment: null
+  epsilon: 0.1 # epsilon is the parameter for soft diff loss

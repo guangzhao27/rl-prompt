@@ -53,7 +53,7 @@ def load_few_shot_classification_dataset(
     num_shots: int
 ) -> Tuple[List[str]]:
     assert dataset in ['agnews', 'cr', 'mr', 'sst-2', 
-                       'sst-5', 'yelp-2', 'yelp-5']
+                       'sst-5', 'yelp-2', 'yelp-5', 'dbpedia', 'subj', 'trec', 'yahoo']
     assert split in ['train', 'dev', 'test']
     assert num_shots in [16]
 
@@ -122,12 +122,13 @@ def make_prompted_classification_reward(
     num_classes: int,
     verbalizers: List[str],
     template: Optional[str],  
-    config: "DictConfig") -> PromptedClassificationReward:
+    config: "DictConfig",
+    fluency_model_name='textattack/roberta-base-CoLA') -> PromptedClassificationReward:
     return PromptedClassificationReward(config.task_lm, config.is_mask_lm, 
                                         config.compute_zscore, 
                                         config.incorrect_coeff, 
                                         config.correct_coeff,
-                                        num_classes, verbalizers, template, report_to_wandb=config.report_to_wandb)
+                                        num_classes, verbalizers, template, report_to_wandb=config.report_to_wandb, device=config.training_device, fluency_model_name=fluency_model_name)
 
 
 @dataclass

@@ -1,0 +1,10 @@
+Based on the content of the text, would you describe it as following classes? Provide a clear classification.  
+How would you classify the sentiment of this text? 
+Is this piece of text closer which class in terms of quality and tone?
+Would you label this input as which class, considering its overall message? 
+Does the given text fall under the follwoing class when evaluating its clarity and effectiveness? 
+Analyze the text and determine whether it can be categorized as the following classes. 
+Given the tone and content, should this text be classified as the classes? 
+Is the sentiment conveyed in the text more aligned with whicb class? 
+After reading this text, do you find it to be in which class in terms of expression? 
+Evaluate the text and assign it a label, based on its overall impression. 

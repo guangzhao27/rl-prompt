@@ -4,40 +4,127 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
-            "name": "run_tst",
+            "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/examples/text-style-transfer/run_tst.py",
+            "program": "${file}",
             "console": "integratedTerminal", 
+            "cwd": "${fileDirname}"
+        },
+        {
+            "name": "run_EA_fsc",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/examples/EA/run_EA_fsc.py",
+            "console": "integratedTerminal",
             "args": [
-                "dataset=shakespeare",
-                "dataset_seed=0",
-                "num_samples=1",
-                "num_bootstraps=1",
-                "task_top_k=1",
-                "top_k=0",
+                "dataset=sst-2",
+                "dataset_name=sst-2",
+                "dataset_seed=1",
+                "prompt_length=5",
+                "task_lm=roberta-large",
+                "dpo_loss_config.name=ipo",
+                "dpo_loss_config.reference_learning_rate=0.001",
+                "report_to_wandb=true",
+                "dpo_training=false",
+                "training_device=cpu",
+                "max_train_steps=6000",
+                "run_name=roberta-large-rl",
+                "report_to_wandb=false", 
+                "algorithm_name=ParetoPrompt-IPO",
+                "eval_batch_size=2", 
+                "dominate_evaluate_num=2",
+            ],
+            "cwd": "${workspaceFolder}/examples/few-shot-classification/"
+        },
+        {
+            "name": "run_EA",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/examples/EA/run_EA_sts.py",
+            "console": "integratedTerminal",
+            "args": [
+                "dataset=yelp",
+                // "dataset_seed=0",
+                "top_k=200",
                 "direction=0_to_1",
                 "prompt_length=2",
                 "task_lm=distilgpt2",
                 "report_to_wandb=false",
                 "dpo_training=true",
-                "eval_steps=20",
+                "eval_steps=5",
                 "max_train_steps=60",
-                "dpo_loss_config.dpo_training=false",
-                "dpo_loss_config.multi_optimize=false",
-                "dpo_loss_config.name=reinforce", 
-                "dpo_loss_config.nondominate_punishment=prob_diff",
+                "dpo_loss_config.reference_free=true",
                 "train_batch_size=2",
-                "run_name=newrun", 
-                "model_path=null", // outputs/2024-05-20/05-28-08     /outputs/ckpt/ckpt.step.4000.pth
-                "training_device='cuda'",
-                "load_step=3000",
-                "random_seed=42", 
-                "logit_bias=0", 
-                "algorithm_name='ParetoPrompt IPO'",
+                "run_name=newrun",
+                "model_path=null", //null or  outputs/2024-07-16/16-04-55
+                "training_device='cpu'",
+                "load_step=8000",
+                "random_seed=42",
+                "logit_bias=-10",
+                "algorithm_name='ParetoPrompt-IPO'", //
+            ],
+            "cwd": "${workspaceFolder}/examples/EA/"
+        },
+        {
+            "name": "run_tst",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/examples/text-style-transfer/run_tst.py",
+            "console": "integratedTerminal",
+            "args": [
+                "dataset=yelp",
+                // "dataset_seed=0",
+                "top_k=200",
+                "direction=0_to_1",
+                "prompt_length=2",
+                "task_lm=distilgpt2",
+                "report_to_wandb=false",
+                "dpo_training=true",
+                "eval_steps=5",
+                "max_train_steps=60",
+                "dpo_loss_config.reference_free=true",
+                "train_batch_size=2",
+                "run_name=newrun",
+                "model_path=null", //null or  outputs/2024-07-16/16-04-55
+                "training_device='cpu'",
+                "load_step=8000",
+                "random_seed=42",
+                "logit_bias=-10",
+                "algorithm_name='HVI'",
+                "eval_batch_size=2", 
+                "dominate_evaluate_num=2",
+                "three_objectives=true"
             ],
             "cwd": "${workspaceFolder}/examples/text-style-transfer"
+        },
+        {
+            "name": "run fsc",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/examples/few-shot-classification/run_fsc.py",
+            "console": "integratedTerminal",
+            "args": [
+                "dataset=sst-2",
+                "dataset_seed=1",
+                "prompt_length=5",
+                "task_lm=roberta-large",
+                "dpo_loss_config.name=ipo",
+                "dpo_loss_config.reference_learning_rate=0.001",
+                "report_to_wandb=true",
+                "dpo_training=false",
+                "training_device=cpu",
+                "max_train_steps=6000",
+                "run_name=roberta-large-rl",
+                "report_to_wandb=false", 
+                "algorithm_name=HVI",
+                "eval_batch_size=2", 
+                "dominate_evaluate_num=2",
+                "use_perplexity=true"
+            ],
+            "cwd": "${workspaceFolder}/examples/few-shot-classification"
         },
         {
             "name": "load model",
@@ -67,3 +154,9 @@
         }
     ]
 }
+// "Reward-Guided-DPO"
+// "Reward-Guided-IPO"
+// "Dominance-Only-DPO"
+// "Dominance-Only-IPO"
+// "ParetoPrompt-DPO":
+// "ParetoPrompt-IPO"

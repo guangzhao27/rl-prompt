@@ -7,12 +7,45 @@ from transformers import pipeline, AutoTokenizer
 from bert_score import BERTScorer
 from collections import defaultdict
 from tst_modules import PromptedGenerator, TextStyleTransferOutputSelector
+from transformers import AutoTokenizer, AutoModelForMaskedLM, GPT2LMHeadModel, AutoModelForSequenceClassification, GPT2Tokenizer
 
 from rlprompt.rewards import BaseReward
 
 # Magic variable
 SUPPORTED_LMS = ['distilgpt2', 'gpt2', 'gpt2-medium',
                  'gpt2-large', 'gpt2-xl']
+
+def perplexity_calculate(input_text, model_name_p, model_p, tokenizer_p):
+
+    
+    if model_name_p == "textattack/roberta-base-CoLA":
+        # Input sentence
+        sentence = input_text
+
+        # Tokenize input
+        inputs = tokenizer_p(sentence, return_tensors="pt")
+        with torch.no_grad():
+            outputs = model_p(**inputs)
+
+            # Get prediction (logits)
+            logits = outputs.logits
+            probabilities = torch.softmax(logits, dim=-1)
+
+        # Probability that the sentence is acceptable
+        acceptability_score = probabilities[0][1].item()
+        return torch.tensor(acceptability_score)
+    
+    elif model_name_p == "gpt2":
+        input_ids = tokenizer_p.encode(input_text, return_tensors="pt")
+
+        # Get the model's output (logits and loss)
+        with torch.no_grad():
+            outputs = model_p(input_ids, labels=input_ids)
+            loss = outputs.loss
+
+        # Calculate perplexity
+        perplexity = torch.exp(loss)
+        return 1e8 - perplexity
 
 
 class PromptedTextStyleTransferReward(BaseReward):
@@ -33,7 +66,9 @@ class PromptedTextStyleTransferReward(BaseReward):
         template: str,  # Template for prompt generation
         end_punct: str,  # End punctuation to cut off after generation
         device: str,
-        multi_optimize: bool = False
+        multi_optimize: bool = False,
+        three_objectives: bool = False,
+        fluency_model_name: str="textattack/roberta-base-CoLA"
     ):
         generator_device = device  # TODO
         reward_device = device  # TODO
@@ -64,6 +99,16 @@ class PromptedTextStyleTransferReward(BaseReward):
         self._counter = 0
         self.tokens_explored = set()
         self.multi_optimize = multi_optimize
+        self.three_objectives = three_objectives
+        
+        self.model_name_p = fluency_model_name
+        if self.model_name_p == "textattack/roberta-base-CoLA":
+            self.tokenizer_p = AutoTokenizer.from_pretrained(self.model_name_p)
+            self.model_p = AutoModelForSequenceClassification.from_pretrained(self.model_name_p)
+        elif self.model_name_p == "gpt2":
+            self.tokenizer_p = GPT2Tokenizer.from_pretrained(self.model_name_p)
+            self.model_p = GPT2LMHeadModel.from_pretrained(self.model_name_p)
+        self.model_p.eval()
 
     def forward(
         self,
@@ -94,6 +139,7 @@ class PromptedTextStyleTransferReward(BaseReward):
         rewards: List[torch.Tensor] = [] 
         probs: List[torch.Tensor] = []
         contents: List[torch.Tensor] = []
+        perplexities: List[torch.Tensor] = []
         input_rewards: Dict[str, List[float]] = defaultdict(list)
         quantities_to_log: Dict[str, List[torch.Tensor]] = defaultdict(list)
         for i, (prompt, src, label) in enumerate(zip(prompt_strs,
@@ -103,16 +149,12 @@ class PromptedTextStyleTransferReward(BaseReward):
                                                    self.top_k, self.top_p)
             sum_rewards, content_scores, style_probs = \
                 self.selector.compute_sample_rewards(src, hypos, label)
-
-            # Bootstrap the max reward for k times and average
+            
             bootstrap_max_rewards: List[float] = \
                 self._boostrap_max_rewards_k_times(sum_rewards, k_reward)
             # Average boostrap max rewards as the final reward
-            if multi_optimize:
             # reward = torch.Tensor(bootstrap_max_rewards).float().mean()
-                reward = torch.Tensor(sum_rewards).float().mean()
-            else:
-                reward = torch.Tensor(bootstrap_max_rewards).float().mean()
+            reward = torch.Tensor(sum_rewards).float().mean()
 
             # Keep track of each input's max rewards to compute z-score
             input_rewards[src] += bootstrap_max_rewards
@@ -143,6 +185,13 @@ class PromptedTextStyleTransferReward(BaseReward):
             rewards.append(reward)
             probs.append(prob)
             contents.append(content)
+            
+            if self.three_objectives:
+                corrected_string = " ".join([token.replace('Ġ', '') for token in prompt_tokens[i]])
+                perplexity = perplexity_calculate(corrected_string, self.model_name_p, self.model_p, self.tokenizer_p)
+                perplexities.append(perplexity)
+        
+        perplexity_tensor = torch.stack(perplexities)
 
         rewards_tensor = torch.stack(rewards)
         if mode == "train" and self.compute_zscore:
@@ -159,11 +208,17 @@ class PromptedTextStyleTransferReward(BaseReward):
             (reward_key, torch.stack(reward_vals, dim=0).mean())
             for reward_key, reward_vals in quantities_to_log.items())
         
+        mean_style = torch.stack(probs)
+        mean_content = torch.stack(contents)
+        multi_rewards_dict = {'style':mean_style, 'content':mean_content}
+        
+        
+        if self.three_objectives:
+            rewards_tensor = rewards_tensor+perplexity_tensor
+            multi_rewards_dict['cola'] = perplexity_tensor
         
         if multi_optimize is True:
-                mean_style = torch.stack(probs)
-                mean_content = torch.stack(contents)
-                return rewards_tensor, mean_style, mean_content, rewards_log
+            return rewards_tensor, multi_rewards_dict, prompt_tokens, rewards_log
         
         if to_tensor is True:
             return rewards_tensor, rewards_log

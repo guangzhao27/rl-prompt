@@ -1,0 +1,19 @@
+"Transform the following negative review into a positive one while keeping the focus on the same restaurant details."
+
+"Rewrite this negative restaurant review in a positive tone, preserving the original content about the food, service, and atmosphere."
+
+"Turn this negative feedback into a positive review, but make sure to retain the core details about the restaurant experience."
+
+"Convert the given negative review into a positive one. Ensure that the comments on the menu, ambiance, and staff remain the same, but in a more positive light."
+
+"Take this negative restaurant review and rewrite it as a positive one, ensuring the same aspects of the service and food are mentioned."
+
+"Modify this negative review into a positive review. Keep the original restaurant details but reframe them in a more favorable way."
+
+"Rewrite this negative restaurant feedback into a positive review, while maintaining the same focus on food, service, and decor."
+
+"Turn the following negative review into a positive one, making sure the key elements of the dining experience remain intact."
+
+"Transform this negative review into a positive restaurant review, retaining the original points about the food, service, and atmosphere."
+
+"Take the following negative review and rephrase it as a positive one, ensuring the content about the restaurant remains the same."

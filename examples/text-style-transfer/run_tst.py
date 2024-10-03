@@ -11,13 +11,14 @@ from rlprompt.modules import SQLModuleConfig, make_sql_module
 from rlprompt.models import (LMAdaptorModelConfig, SinglePromptModelConfig,
                              make_lm_adaptor_model, make_single_prompt_model)
 from rlprompt.utils.utils import (colorful_print, compose_hydra_config_store,
-                                  get_hydra_output_dir)
+                                  get_hydra_output_dir, 
+                                  algorithm_set_config,
+                                  )
 from tst_helpers import (PromptedTextStyleTransferRewardConfig,
                          TextStyleTransferDatasetConfig,
                          make_prompted_text_style_transfer_reward,
                          make_text_style_transfer_datasets,
                          get_style_classifier, 
-                         algorithm_set_config, 
                          )
 from dataclasses import dataclass
 
@@ -36,6 +37,9 @@ class LoadConfig:
     load_step: int = 0
     few_shot: int = -1
     dominate_evaluate_num: int = 16
+    temperature: float = 0.3
+    three_objectives: bool=False
+    task_type: str='tst'
 
 # Compose default config
 config_list = [PromptedTextStyleTransferRewardConfig,
@@ -48,7 +52,7 @@ cs = compose_hydra_config_store('base_tst', config_list)
 def main(config: "DictConfig"):
     
     config.prompt_train_batch_size = config.num_repeats*config.train_batch_size ## TODO: this should be fixed, too many free configs
-    colorful_print(OmegaConf.to_yaml(config), fg='red')
+    
     output_dir = get_hydra_output_dir()
 
     train_dataset, val_dataset, test_dataset = \
@@ -60,7 +64,8 @@ def main(config: "DictConfig"):
 
     print("Algorithm Name: ", config.algorithm_name)
     algorithm_set_config(config)
-
+    
+    colorful_print(OmegaConf.to_yaml(config), fg='red')
 
     policy_model = make_lm_adaptor_model(config)
     prompt_model = make_single_prompt_model(policy_model, config)

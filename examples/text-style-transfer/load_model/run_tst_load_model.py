@@ -82,9 +82,15 @@ def main(config: "DictConfig"):
             # generate {prompt_train_batch_size} prompts 
         content_list = []
         style_list = []
+        cola_list = []
         for prompt in output_tokens:    
             output_token_list = [prompt]*len(batch['source_texts'])
-            sum_reward, content_reward, style_reward, rewards_log= algo_module.compute_rewards(batch=batch, output_tokens=output_token_list, multi_optimize=True)
+            sum_reward, multi_rewards_dict, tokens_list, rewards_log= algo_module.compute_rewards(batch=batch, output_tokens=output_token_list, multi_optimize=True)
+            style_reward = multi_rewards_dict['style']
+            content_reward = multi_rewards_dict['content']
+            if len(multi_rewards_dict) == 3:
+                cola = multi_rewards_dict['cola']
+                cola_list.append(cola.mean().item())
             # for each prompt, calculate the average reward, the reward average over 16 validation sentence, 
             # each sentence and prompt generating {num_samples}*{num_bootstraps} sentences 
             # the reward average over the 16*{num_samples}*{num_bootstraps} rewards
@@ -93,6 +99,7 @@ def main(config: "DictConfig"):
             style_list.append(style_reward.mean().item())
         performance_list[f'{epoch}']['content'] = content_list
         performance_list[f'{epoch}']['style'] = style_list
+        performance_list[f'{epoch}']['cola'] = cola_list
     
     file_name ="../"+config.run_name+".json"
     

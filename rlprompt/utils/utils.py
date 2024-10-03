@@ -9,6 +9,25 @@ from dataclasses import dataclass
 from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
 
+algorithm_dict = {
+    "RlPrompt": {"dpo_training":False, "name":"dpo", "multi_optimize":False, "nondominate_punishment":None}, 
+    "Product": {"dpo_training":False, "name":"dpo", "multi_optimize":False, "nondominate_punishment":None}, 
+    "HVI": {"dpo_training":False, "name":"dpo", "multi_optimize":False, "nondominate_punishment":None}, 
+    "Reward-Guided-DPO": {"dpo_training":True, "name":"dpo", "multi_optimize":False, "nondominate_punishment":None}, 
+    "Reward-Guided-IPO": {"dpo_training":True, "name":"ipo", "multi_optimize":False, "nondominate_punishment":None}, 
+    "Dominance-Only-DPO": {"dpo_training":True, "name":"dpo", "multi_optimize":True, "nondominate_punishment":None}, 
+    "Dominance-Only-IPO": {"dpo_training":True, "name":"ipo", "multi_optimize":True, "nondominate_punishment":None}, 
+    "ParetoPrompt-DPO": {"dpo_training":True, "name":"dpo", "multi_optimize":True, "nondominate_punishment":"prob_diff"}, 
+    "ParetoPrompt-IPO": {"dpo_training":True, "name":"ipo", "multi_optimize":True, "nondominate_punishment":"prob_diff"}, 
+}
+
+def algorithm_set_config(config: "DictConfig"):
+    for key, value in algorithm_dict[config.algorithm_name].items():
+        setattr(config.dpo_loss_config, key, value)
+    if config.algorithm_name == 'Product':
+        config.compute_zscore = False
+    return
+
 
 def get_hydra_output_dir():
     return HydraConfig.get().run.dir

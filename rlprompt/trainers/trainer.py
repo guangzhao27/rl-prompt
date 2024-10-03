@@ -13,7 +13,10 @@ from rlprompt.utils import utils
 from .trainer_utils import get_default_train_op, set_random_seed, find_pareto_front, calculate_dominating_volume, evaluate_model_dominate_volume
 import copy
 from collections import defaultdict
+import matplotlib.pyplot as plt
 
+EVAL_STEPS_fsc = [1, 2, 200, 400, 600, 800, 1000, 2000, 4000, 6000]
+EVAL_STEPS_tst = [1, 200, 500, 1000, 2000, 4000,  5000, 10000]
 class Trainer:
     """Trainer that runs for a specified number of epochs. 
 
@@ -89,6 +92,8 @@ class Trainer:
         self.report_to_wandb = report_to_wandb
         self.project_name = project_name
         self.run_name = run_name
+        self.eval_num = 0
+        self.pareto_front_dict = {}
 
     def _load_checkpoint(self, checkpoint_path: str) -> None:
         checkpoint = torch.load(checkpoint_path, map_location='cpu')
@@ -127,7 +132,8 @@ class Trainer:
               report_to_wandb: Optional[bool] = None,
               project_name: Optional[str] = None,
               run_name: Optional[str] = None,
-              config: Optional["DictConfig"] = None) -> None:
+              config: Optional["DictConfig"] = None, 
+              reward2=None) -> None:
         # Configure Wandb reporting
         if report_to_wandb is None:
             report_to_wandb = self.report_to_wandb
@@ -143,7 +149,10 @@ class Trainer:
             wandb.watch(self.module, log=None)
             print(wandb.run.dir)
             print(self.run_name)
-
+        
+        self.eval_steps = EVAL_STEPS_tst if config.task_type == 'tst' else EVAL_STEPS_fsc
+        self.different_reward=reward2
+        
         # Create saving path
         eval_save_dir = os.path.join(self.save_dir, "eval")
         ckpt_save_dir = os.path.join(self.save_dir, "ckpt")
@@ -163,7 +172,7 @@ class Trainer:
                  + int(self.max_train_steps % num_batches_per_epoch > 0))
 
         # Determine whether to evaluate by epoch or steps
-        eval_by_steps = self.eval_steps > 0
+        eval_by_steps = True # self.eval_steps > 0
         # Determine whether to save by epoch or steps
         save_by_steps = self.save_steps > 0
 
@@ -179,27 +188,32 @@ class Trainer:
                 
 
                 if self.do_eval and eval_by_steps \
-                        and total_steps % self.eval_steps == 0:
+                        and total_steps in self.eval_steps:
                     print('start evaluation')
                     output_save_path = \
                         os.path.join(eval_save_dir,
                                      f'outputs.step.{total_steps}.json')
-                    eval_log, performance = self.evaluate(output_save_path=output_save_path, dominate_evaluate_num=config.dominate_evaluate_num)
+                    eval_log, performance = self.evaluate(output_save_path=output_save_path, 
+                                                          dominate_evaluate_num=config.dominate_evaluate_num, 
+                                                          run_name = run_name,
+                                                          total_steps=total_steps
+                                                          )
                     if report_to_wandb:
                         wandb.log(eval_log, step=total_steps)
                     
-                    file_name = run_name + '.json'
-                    if os.path.exists(file_name):
-                        with open(file_name, 'r') as f:
-                            performance_dict = json.load(f)
-                    else:
-                        performance_dict = {}
-                    performance_dict[total_steps] = performance
-                    with open(file_name, 'w') as f:
-                        json.dump(performance_dict, f)
+                    # file_name = run_name + '.json'
+                    # if os.path.exists(file_name):
+                    #     with open(file_name, 'r') as f:
+                    #         performance_dict = json.load(f)
+                    # else:
+                    #     performance_dict = {}
+                    # performance_dict[total_steps] = performance
+                    
+                    # with open(file_name, 'w') as f:
+                    #     json.dump(performance_dict, f)
 
                 if self.do_save and save_by_steps \
-                        and total_steps % self.save_steps == 0:
+                        and total_steps in self.eval_steps:
                     torch.save({"steps": total_steps,
                                 "model_state_dict": self.module.state_dict(), 
                                 "optimizer_state": self.optimizer.state_dict(), 
@@ -231,8 +245,13 @@ class Trainer:
         eval_dataset: Optional[Dataset] = None,
         output_save_path: Optional[str] = None,
         dominate_evaluate_num: int=16,
-        compute_scores: bool = True
+        compute_scores: bool = True,
+        run_name = None,
+        total_steps = 0, 
     ) -> Dict[str, np.number]:
+        
+        self.eval_num += 1
+        
         if eval_dataset is None:
             eval_dataset = self.eval_dataset
         eval_dataloader = self._get_eval_dataloader(eval_dataset)
@@ -243,37 +262,82 @@ class Trainer:
         for batch in eval_dataloader:
             infer_outputs: Dict[str, Union[torch.Tensor, List[List[str]]]]
             infer_outputs = model.infer(batch)
-            hypos += infer_outputs['sample_tokens'] #hypos are the most likely prompts
 
-            score, content_reward, style_reward, score_log = model.compute_rewards(
-                batch=batch,
-                output_tokens=infer_outputs['sample_tokens'], multi_optimize=True)
-            scores += score.detach().tolist()
+        #these three lines can be skipped. this one calculate the best token performance. While dominate volume calculate all the tokens performance
+        # hypos += infer_outputs['sample_tokens'] #hypos are the most likely prompts
+        score, multi_rewards_dict, tokens_list, score_log = model.compute_rewards(
+            batch=batch,
+            output_tokens=infer_outputs['sample_tokens'], multi_optimize=True)
+        scores += score.detach().tolist()
+    
+        # generate many prompt like load and log the mean style and content and calculate the dominating area]
+        output_tokens_P = list(self.pareto_front_dict.keys()) if self.pareto_front_dict is not None else None
+        dominate_volume, performance = evaluate_model_dominate_volume(model=model, batch=batch, dominate_evaluate_num=dominate_evaluate_num, 
+                                                                          output_tokens_P=output_tokens_P)
+        # dominate_volume, performance = evaluate_model_dominate_volume(model=model, batch=batch, dominate_evaluate_num=dominate_evaluate_num,
+        #                                                             )
+        if self.different_reward:
+            dominate_volume2, performance2 = evaluate_model_dominate_volume(model=model, batch=batch, dominate_evaluate_num=dominate_evaluate_num,
+                                                                            output_tokens_P=output_tokens_P,
+                                                                            different_reward=self.different_reward)
+        else:
+            dominate_volume2=0
+        # if output_save_path is not None:
+        #     json.dump({'output_tokens': hypos,
+        #                'scores': scores},
+        #               open(output_save_path, 'w'))
         
-            # generate many prompt like load and log the mean style and content and calculate the dominating area
-            dominate_volume, performance = evaluate_model_dominate_volume(model=model, batch=batch, dominate_evaluate_num=dominate_evaluate_num)
-        if output_save_path is not None:
-            json.dump({'output_tokens': hypos,
-                       'scores': scores},
-                      open(output_save_path, 'w'))
-
-        score = score.mean().item()
-        content_reward = content_reward.mean().item()
-        style_reward = style_reward.mean().item()
-
+        # object1_name, object2_name = multi_rewards_dict.keys()
+        # object1_value, object2_value = multi_rewards_dict[object1_name], multi_rewards_dict[object2_name]
+        
+        # score = score.mean().item()
+        # object1_value = object1_value.mean().item()
+        # object2_value = object2_value.mean().item()
+        objects_name_list = list(multi_rewards_dict.keys())
+        object1_name = objects_name_list[0]
+        object2_name = objects_name_list[1]
+        object1_value = torch.tensor(performance[object1_name]).max().item()
+        object2_value = torch.tensor(performance[object2_name]).max().item()
+        performance['dominating_volume2'] = dominate_volume2
+        performance['pareto_front'] = self.pareto_front_dict
         utils.add_prefix_to_dict_keys_inplace(
             score_log,
             prefix=f"eval/rewards/")
 
         print('Finish Eval')
+        
+        #save performance data to json
+        file_name = run_name + '.json'
+        if os.path.exists(file_name):
+            with open(file_name, 'r') as f:
+                performance_dict = json.load(f)
+        else:
+            performance_dict = {}
+        performance_dict[total_steps] = performance
+        
+        with open(file_name, 'w') as f:
+            json.dump(performance_dict, f)
+            
+        #draw scatter
+        
+        if total_steps in self.eval_steps:
+            plt.scatter(performance[object1_name], performance[object2_name], label=total_steps)
+            plt.xlabel(f'{object1_name} score')
+            plt.ylabel(f'{object2_name} score')
+            plt.legend()
+            plt.savefig(run_name+str(total_steps)+'.png', format='png')
+            plt.figure()
+        
         return utils.unionize_dicts([
             score_log,
             # gem_scores_dict,
             {
                 f"eval/dominate_volume": dominate_volume,
+                f"eval/dominate_volume2": dominate_volume2, 
+                f"eval/pareto_size": performance['pareto_size'],
                 f"eval/score": score,
-                f"eval/content":content_reward, 
-                f"eval/style": style_reward, 
+                f"eval/{object1_name}":object1_value, 
+                f"eval/{object2_name}": object2_value, 
                 f"eval/output_length": np.mean([len(tokens) \
                                                 for tokens in hypos])
             }
@@ -287,4 +351,34 @@ class Trainer:
             checkpoint = torch.load(ckpt_path, map_location=torch.device("cuda"))
         self.optimizer.load_state_dict(checkpoint['optimizer_state'])
         self.module.load_state_dict(checkpoint['model_state_dict'])
+        
+    def update_pareto_front(self, multi_rewards_dict, tokens_list):
+        tokens_list += list(self.pareto_front_dict.keys())
+        combined_rewards = torch.stack(list(multi_rewards_dict.values()), dim=1)
+        
+        if self.pareto_front_dict:
+            old_pareto_front = torch.stack(list(self.pareto_front_dict.values()))
+            combined_rewards = torch.cat((combined_rewards, old_pareto_front))
+            
+        pareto_front_indices = []
+        dominated_by = torch.zeros(combined_rewards.size(0), dtype=torch.bool)
+        
+        for idx, point1 in enumerate(combined_rewards):
+            if not dominated_by[idx]:
+                pareto_front_indices.append(idx)
+                for j, point2 in enumerate(combined_rewards):
+                    if idx != j:
+                        if torch.all(point1 >= point2):
+                            dominated_by[j] = True
+                        elif torch.all(point1 <= point2):
+                            dominated_by[idx] = True
+                            pareto_front_indices.remove(idx)
+                            break
+        # new_pareto_front_dict = {}
+        # for idx in pareto_front_indices:
+        #     token = tuple(tokens_list[idx])
+        #     tensor = combined_rewards[idx]
+        #     new_pareto_front_dict[token] = tensor
+        # self.pareto_front_dict = new_pareto_front_dict
+        self.pareto_front_dict = {tuple(tokens_list[idx]): combined_rewards[idx] for idx in pareto_front_indices}
         

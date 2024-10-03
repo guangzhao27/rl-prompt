@@ -8,3 +8,7 @@
 slurm*
 *cache*
 *.tsv
+*.ipynb
+*.csv
+llm-eval/*
+*.pdf

@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from transformers import AutoTokenizer, AutoModelForMaskedLM, GPT2LMHeadModel
+from transformers import AutoTokenizer, AutoModelForMaskedLM, GPT2LMHeadModel, AutoModelForSequenceClassification, GPT2Tokenizer
 from typing import List, Dict, Optional, Tuple, Union, Any
 from collections import defaultdict
 from rlprompt.rewards import BaseReward
@@ -9,6 +9,63 @@ SUPPORTED_LEFT_TO_RIGHT_LMS = ['distilgpt2', 'gpt2', 'gpt2-medium',
                                'gpt2-large', 'gpt2-xl']
 SUPPORTED_MASK_LMS = ['distilroberta-base', 'roberta-base', 'roberta-large']
 
+# def perplexity_calculate2(input_text):
+#     model_name = "gpt2"
+#     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+#     model = GPT2LMHeadModel.from_pretrained(model_name)
+
+#     # Set the model to evaluation mode
+#     model.eval()
+
+#     # Tokenize the input
+#     input_ids = tokenizer.encode(input_text, return_tensors="pt")
+
+#     # Get the model's output (logits and loss)
+#     with torch.no_grad():
+#         outputs = model(input_ids, labels=input_ids)
+#         loss = outputs.loss
+
+#     # Calculate perplexity
+#     perplexity = torch.exp(loss)
+#     return perplexity
+
+
+# model_name_p = "textattack/roberta-base-CoLA"
+# tokenizer_p = AutoTokenizer.from_pretrained(model_name_p)
+# model_p = AutoModelForSequenceClassification.from_pretrained(model_name_p)
+# model_p.eval()
+
+def perplexity_calculate(input_text, model_name_p, model_p, tokenizer_p):
+
+    
+    if model_name_p == "textattack/roberta-base-CoLA":
+        # Input sentence
+        sentence = input_text
+
+        # Tokenize input
+        inputs = tokenizer_p(sentence, return_tensors="pt")
+        with torch.no_grad():
+            outputs = model_p(**inputs)
+
+            # Get prediction (logits)
+            logits = outputs.logits
+            probabilities = torch.softmax(logits, dim=-1)
+
+        # Probability that the sentence is acceptable
+        acceptability_score = probabilities[0][1].item()
+        return torch.tensor(acceptability_score)
+    
+    elif model_name_p == "gpt2":
+        input_ids = tokenizer_p.encode(input_text, return_tensors="pt")
+
+        # Get the model's output (logits and loss)
+        with torch.no_grad():
+            outputs = model_p(input_ids, labels=input_ids)
+            loss = outputs.loss
+
+        # Calculate perplexity
+        perplexity = torch.exp(loss)
+        return 1e8 - perplexity
 
 class PromptedClassificationReward(BaseReward):
     def __init__(
@@ -22,11 +79,13 @@ class PromptedClassificationReward(BaseReward):
         verbalizers: List[str],
         template: Optional[str],
         training_type: str = 'rl_training',
+        device: str = 'cpu',
         report_to_wandb: bool = False, 
+        multi_optimize: bool = False,
+        fluency_model_name: str = "textattack/roberta-base-CoLA",
     ):
         super().__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available()
-                                   else "cpu")
+        self.device = torch.device(device)
         self.task_lm = task_lm
         if is_mask_lm is None: 
             # If False, then treat as left-to-right LM
@@ -65,6 +124,16 @@ class PromptedClassificationReward(BaseReward):
         else: 
             self.template = template
         self._counter = 0
+        self.multi_optimize = multi_optimize
+        
+        self.model_name_p = fluency_model_name
+        if self.model_name_p == "textattack/roberta-base-CoLA":
+            self.tokenizer_p = AutoTokenizer.from_pretrained(self.model_name_p)
+            self.model_p = AutoModelForSequenceClassification.from_pretrained(self.model_name_p)
+        elif self.model_name_p == "gpt2":
+            self.tokenizer_p = GPT2Tokenizer.from_pretrained(self.model_name_p)
+            self.model_p = GPT2LMHeadModel.from_pretrained(self.model_name_p)
+        self.model_p.eval()
 
     def load_default_template(self) -> str:
         if self.is_mask_lm:
@@ -81,19 +150,22 @@ class PromptedClassificationReward(BaseReward):
         class_labels: List[int],
         output_tokens: List[List[str]],
         to_tensor: bool,
-        mode: str
+        mode: str, 
+        multi_optimize: bool=False,
     ) -> Tuple[Union[List[float], torch.Tensor], Dict[str, Any]]:
         assert mode in ["train", "infer"]
         
         if mode == "train":
             self._counter += 1
-
+        else: output_tokens = [output_tokens[0]]
         # Process prompts and verbalizer indices
         prompt_tokens = output_tokens
         prompt_strings = self._convert_tokens_to_string(prompt_tokens)
         batch_size = len(source_texts)
 
         rewards: List[torch.Tensor] = []
+        perplexities: List[torch.Tensor] = []
+        accs: List[torch.Tensor] = []
         input_rewards: Dict[str, List[float]] = defaultdict(list)
         quantities_to_log: Dict[str, List[torch.Tensor]] = defaultdict(list)
         for i, prompt in enumerate(prompt_strings):
@@ -122,7 +194,13 @@ class PromptedClassificationReward(BaseReward):
             gap_rewards = gap * (self.correct_coeff * correct \
                                  + self.incorrect_coeff * (1 - correct))  ## reward define here
             reward = gap_rewards.mean().detach()
-
+            
+            #perplexity calcuate
+            corrected_string = " ".join([token.replace('Ġ', '') for token in prompt_tokens[i]])
+            # with open('string_record.txt', 'a') as f:
+            #     f.write(corrected_string+'\n')
+            perplexity = perplexity_calculate(corrected_string, self.model_name_p, self.model_p, self.tokenizer_p)
+            
             # Log quantities such as accuracy and class-wise reward
             acc = correct.float().mean()
             quantities_to_log['acc'].append(acc.item())
@@ -133,9 +211,12 @@ class PromptedClassificationReward(BaseReward):
                     class_rewards.mean().item())
             quantities_to_log['gap_reward'].append(reward.item())
             rewards.append(reward)
+            perplexities.append(perplexity)
+            accs.append(acc)
 
             # keep track of rewards for z-score normalization
             input_rewards['z'] += [reward.item()]
+            input_rewards['per'] += [perplexity.item()]
 
             # Print examples
             if  self.print:
@@ -153,7 +234,10 @@ class PromptedClassificationReward(BaseReward):
                             'Reward:', round(reward.item(), 2)]
                 print(*print_strs)
         rewards_tensor = torch.stack(rewards)
-
+        perplexity_tensor = torch.stack(perplexities)
+        acc_tensor = torch.stack(accs)
+        # perplexity_tensor = 1 - perplexity_tensor  # perplexity is a minimize objective
+        origin_perplexity = perplexity_tensor.clone()
         # z-score normalization (2nd stage)
         if mode == 'train' and self.compute_zscore:
             input_reward_means = {k: np.mean(v)
@@ -164,6 +248,10 @@ class PromptedClassificationReward(BaseReward):
             idx_means = torch.tensor(input_reward_means['z']).float()
             idx_stds = torch.tensor(input_reward_stds['z']).float()
             rewards_tensor = (rewards_tensor - idx_means)/(idx_stds + 1e-4)
+            per_means = torch.tensor(input_reward_means['per']).float()
+            per_stds = torch.tensor(input_reward_stds['per']).float()
+            perplexity_tensor = (perplexity_tensor - per_means)/(per_stds + 1e-4)
+            
             for i in range(rewards_tensor.size(0)):
                 quantities_to_log['resized_reward'].append(
                     rewards_tensor[i].item())
@@ -177,10 +265,21 @@ class PromptedClassificationReward(BaseReward):
             for reward_key, reward_vals in quantities_to_log.items())  ## reward log is defined here
         print(self._counter)
         print(rewards_log)
+        rewards_tensor =rewards_tensor.cpu()
+        acc_tensor = acc_tensor.cpu()
+        
+        # no need to normalize perplexity
+        perplexity_tensor=origin_perplexity
+        if multi_optimize:
+            multi_rewards_dict = {'accuracy': acc_tensor, 'perplexity':origin_perplexity}
+            # token_list = prompt_tokens
+            return rewards_tensor+perplexity_tensor, multi_rewards_dict, prompt_tokens, rewards_log
+        
         if to_tensor is True:
-            return rewards_tensor, rewards_log
+            return rewards_tensor+perplexity_tensor, rewards_log
         else:
-            return rewards_tensor.tolist(), rewards_log
+            return (rewards_tensor+perplexity_tensor).tolist(), rewards_log
+        
 
     # Adapted from
     # https://huggingface.co/docs/transformers/v4.21.1/en/task_summary#masked-language-modeling

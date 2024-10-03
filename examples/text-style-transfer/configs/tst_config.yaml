@@ -13,7 +13,7 @@ control_output_length: true
 
 # Single Prompt Model
 prompt_length: 5
-prompt_train_batch_size: 8 # prompt_train_batch_size = train_batch_size*num_repeats
+# prompt_train_batch_size: 8 # prompt_train_batch_size = train_batch_size*num_repeats
 prompt_infer_batch_size: 16
 # LM Adaptor Model
 logit_bias: -10
@@ -39,7 +39,7 @@ run_name: null
 dpo_loss_config: 
   dpo_training: false
   name: "dpo"
-  beta: 0.5
+  beta: 1.0
   reference_free: false
   label_smoothing: 0.0
   multi_optimize: false
@@ -59,12 +59,14 @@ target_update_method: "polyak" # select among "copy" or "polyak".
 target_update_steps: null # steps number to update reference model, for target_update_method="copy"
 target_learning_rate: 0.001 # reference model learning rate
 
-# Deterministic text generation
-num_samples: 1
-num_bootstraps: 1
-task_top_k: 1
-top_k: 0 # generate prompt for training is always random
+# # Deterministic text generation
+# num_samples: 1
+# num_bootstraps: 1
+# task_top_k: 1
+# top_k: 50 # generate prompt for training is always random
 
-
+# Non-Deterministic text generation
+task_top_k: 10
+top_k: 50 # generate prompt for training is always random
 
 algorithm_name: RlPrompt

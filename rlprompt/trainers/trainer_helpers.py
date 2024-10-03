@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 from typing import Optional, Any, Dict
 
 from rlprompt.modules import BaseModule
-from rlprompt.trainers import Trainer, DPO_Trainer, DPO_O2_Trainer
+from rlprompt.trainers import Trainer, DPO_Trainer, DPO_O2_Trainer_test
 
 def make_trainer(module: BaseModule,
                  train_dataset: Optional[Dataset],
@@ -11,7 +11,7 @@ def make_trainer(module: BaseModule,
                  config: "DictConfig") -> Trainer:
     if config.dpo_loss_config.dpo_training:
         if config.dpo_loss_config.multi_optimize:
-            return DPO_O2_Trainer(module, train_dataset, config.train_batch_size,
+            return DPO_O2_Trainer_test(module, train_dataset, config.train_batch_size,
                         config.train_shuffle, config.train_drop_last, 
                         config.num_train_epochs, config.max_train_steps, 
                         config.do_eval, eval_dataset, config.eval_batch_size, 

@@ -1,6 +1,7 @@
 import os
 import hydra
 from omegaconf import DictConfig, OmegaConf
+from typing import Optional
 import sys
 sys.path.append('../../')
 from rlprompt.models import (LMAdaptorModelConfig, SinglePromptModelConfig,
@@ -8,23 +9,38 @@ from rlprompt.models import (LMAdaptorModelConfig, SinglePromptModelConfig,
 from rlprompt.modules import SQLModuleConfig, make_sql_module
 from rlprompt.trainers import TrainerConfig, make_trainer
 from rlprompt.utils.utils import (colorful_print, compose_hydra_config_store,
-                                  get_hydra_output_dir)
+                                  get_hydra_output_dir, 
+                                  algorithm_set_config
+                                  )
 
 from fsc_helpers import (PromptedClassificationRewardConfig,
                          FewShotClassificationDatasetConfig,
                          make_prompted_classification_reward,
-                         make_few_shot_classification_dataset)
+                         make_few_shot_classification_dataset, 
+                         )
+from dataclasses import dataclass
+
+@dataclass
+class LoadConfig:
+    model_path: Optional[str] = None
+    algorithm_name: str="RlPrompt"
+    load_step: int = 0
+    dominate_evaluate_num: int = 16
+    temperature: float = 0.3
+    use_perplexity: bool=False
+    task_type: str='fsc'
 
 
 # Compose default config
 config_list = [PromptedClassificationRewardConfig,
                 FewShotClassificationDatasetConfig, LMAdaptorModelConfig,
-                SinglePromptModelConfig, SQLModuleConfig, TrainerConfig]
+                SinglePromptModelConfig, SQLModuleConfig, TrainerConfig, LoadConfig]
 cs = compose_hydra_config_store('base_fsc', config_list)
 
 
 @hydra.main(version_base=None, config_path="./", config_name="fsc_config")
 def main(config: "DictConfig"):
+    print('update 1')
     colorful_print(OmegaConf.to_yaml(config), fg='red')
     output_dir = get_hydra_output_dir()
 
@@ -36,11 +52,22 @@ def main(config: "DictConfig"):
     # val_dataset = test_dataset
     print('Val Size', len(val_dataset))
     print('Examples:', val_dataset[:5])
+    print("Algorithm Name: ", config.algorithm_name)
+    algorithm_set_config(config)
 
     policy_model = make_lm_adaptor_model(config)
     prompt_model = make_single_prompt_model(policy_model, config)
-    reward = make_prompted_classification_reward(num_classes, verbalizers, 
+    
+    if config.use_perplexity:
+        reward = make_prompted_classification_reward(num_classes, verbalizers, 
+                                                 template, config, fluency_model_name='gpt2')
+        reward2 = make_prompted_classification_reward(num_classes, verbalizers, 
+                                                 template, config, fluency_model_name='textattack/roberta-base-CoLA')
+    else:
+        reward = make_prompted_classification_reward(num_classes, verbalizers, 
                                                  template, config)
+        reward2 = make_prompted_classification_reward(num_classes, verbalizers, 
+                                                 template, config, fluency_model_name='gpt2')
     algo_module = make_sql_module(prompt_model, reward, config)   # sql model, prompt model and policy model are all the models generate prompts
     
     # task lm is the model to classify the review sentiment
@@ -49,8 +76,14 @@ def main(config: "DictConfig"):
     config.train_batch_size = len(train_dataset)
     config.eval_batch_size = len(val_dataset)
     config.save_dir = os.path.join(output_dir, config.save_dir)
+    
+    if config.run_name:
+        config.run_name = output_dir+config.run_name
+    else:
+        config.run_name = output_dir
+    
     trainer = make_trainer(algo_module, train_dataset, val_dataset, config)
-    trainer.train(config=config, run_name=config.run_name)
+    trainer.train(config=config, run_name=config.run_name, reward2=reward2)
 
 
 if __name__ == "__main__":
